@@ -3,10 +3,10 @@
 > Stake on the outcome of any real-world question. When it's settled, an AI-validator panel reads the
 > resolution source and pays the winners — no central oracle.
 
-**Status:** 🟢 **Built + validated on-chain.** Contract v2 deployed
-(`0x4f4218Ab3A39ecC10CfF8E83a0D43b1F6dDafEe4`) with creator fees + dispute appeals; the Next.js
-frontend (`web/`, Bugatti-inspired monochrome) reads the live markets and is wired to v2. Next:
-GitHub + Vercel deploy.
+**Status:** 🟢 **Deployed on Testnet Bradbury.** Contract (creator fees + dispute appeals) live at
+`0xE51C7920fC1Dea17806E9b348444924df5c52348` on **Testnet Bradbury** (chain 4221); the Next.js
+frontend (`web/`, Bugatti-inspired monochrome) is wired to it. The app is network-switchable via
+`NEXT_PUBLIC_NETWORK` (`bradbury` | `studionet`). Next: GitHub + Vercel deploy.
 
 ## Project summary
 Prediction markets need an **oracle** to decide what actually happened — normally a centralized,
@@ -37,8 +37,9 @@ web/         Next.js + GenLayerJS frontend (Phase 2)
 ```
 
 ## Network
-Studionet — chain ID `61999`, RPC `https://studio.genlayer.com/api`, explorer
-`https://explorer-studio.genlayer.com`.
+**Testnet Bradbury** — chain ID `4221`, RPC `https://rpc-bradbury.genlayer.com`, explorer
+`https://explorer-bradbury.genlayer.com`. (Set `NEXT_PUBLIC_NETWORK=studionet` to run on the
+sponsored-gas Studio sandbox instead.)
 
 _Sibling projects:_ [Credence](https://github.com/Hemmy1417/Credence) (identity) ·
 [Aegis](https://github.com/Hemmy1417/Aegis) (AI-arbitrated escrow).
