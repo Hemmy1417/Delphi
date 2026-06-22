@@ -8,6 +8,7 @@ export const CHAIN = IS_BRADBURY ? testnetBradbury : studionet;
 export const CHAIN_HEX = ("0x" + CHAIN.id.toString(16)) as `0x${string}`;
 export const CHAIN_RPC = CHAIN.rpcUrls.default.http[0];
 export const CHAIN_NAME = CHAIN.name;
+export const NETWORK_LABEL = IS_BRADBURY ? "Testnet Bradbury" : "Studionet";
 // Studionet sponsors gas; Bradbury needs real testnet GEN from a faucet.
 export const GAS_SPONSORED = !IS_BRADBURY;
 

@@ -5,7 +5,7 @@ import "./globals.css";
 import { WalletProvider } from "@/lib/wallet";
 import { ConnectButton } from "@/components/ConnectButton";
 import { DelphiWordmark } from "@/components/Logo";
-import { CONTRACT_CONFIGURED } from "@/lib/config";
+import { CONTRACT_CONFIGURED, NETWORK_LABEL } from "@/lib/config";
 
 const saira = Saira_Condensed({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-saira" });
 const cormorant = Cormorant_Garamond({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-cormorant" });
@@ -59,7 +59,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <footer className="border-t border-hairline">
             <div className="mx-auto max-w-6xl px-5 py-12 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <DelphiWordmark />
-              <p className="eyebrow">The oracle decides · Sealed on GenLayer · Studionet</p>
+              <p className="eyebrow">The oracle decides · Sealed on GenLayer · {NETWORK_LABEL}</p>
             </div>
           </footer>
         </WalletProvider>
