@@ -3,7 +3,8 @@
 > Stake on the outcome of any real-world question. When it's settled, an AI-validator panel reads the
 > resolution source and pays the winners — no central oracle.
 
-**Status:** 🟡 **Phase 0 complete** (planning). Building Phase 1 (the Intelligent Contract) next.
+**Status:** 🟢 **Phase 1 contract deployed** on Studionet (`0x3b4c2716759457E0aE13241cB0243FEE204E205c`).
+Validating the create→stake→close→resolve→claim flow on-chain, then the frontend (Phase 2).
 
 ## Project summary
 Prediction markets need an **oracle** to decide what actually happened — normally a centralized,
