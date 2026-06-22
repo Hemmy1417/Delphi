@@ -62,12 +62,12 @@ export default function MarketsPage() {
           <p className="text-body">No markets match “{query}”.</p>
         </div>
       ) : (
-        <div className="mt-4 grid md:grid-cols-2 gap-px bg-hairline border border-hairline">
+        <div className="mt-4 grid md:grid-cols-2 gap-4">
           {shown.map((m) => {
             const odds = impliedOdds(m.pools);
             const top = odds.indexOf(Math.max(...odds));
             return (
-              <Link key={m.id} href={`/market/${m.id}`} className="bg-canvas card-hover p-7 block">
+              <Link key={m.id} href={`/market/${m.id}`} className="border border-hairline card-hover p-7 block">
                 <div className="flex items-center justify-between gap-3">
                   <span className="tag">{m.id}</span>
                   <StatusBadge status={m.status} />
