@@ -1,20 +1,24 @@
 # v0.1.0
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 
-# Delphi — AI-resolved multi-outcome prediction markets (Phase 1).
-# Users stake GEN on the options of a question; the contract holds the pools. To settle, an
-# AI-validator panel fetches the resolution source and rules which option won (or UNCLEAR), then
-# winners claim their pro-rata share of the total pool (parimutuel). UNCLEAR -> everyone refunds.
+# Delphi — AI-resolved multi-outcome prediction markets (v2).
+# Users stake GEN on the options of a question; the contract holds per-option pools. To settle,
+# an AI-validator panel fetches the resolution source and rules which option won (or UNCLEAR).
+# v2 adds: (1) an optional creator fee skimmed from winners' payouts; (2) an appeal window —
+# resolve() proposes a ruling without paying, the losing side may appeal once for a more rigorous
+# re-read, then finalize() locks it in and opens claims.
 #
 # Lifecycle (action-gated; GenVM has no wall-clock):
-#   OPEN -(close_market)-> CLOSED -(resolve)-> RESOLVED  (winners claim)
-#                                            -> REFUNDING (UNCLEAR/low-confidence; all refund)
+#   OPEN -(close_market)-> CLOSED -(resolve)-> PROPOSED -(finalize)-> RESOLVED  (winners claim)
+#                                                                  -> REFUNDING (UNCLEAR; all refund)
+#   PROPOSED -(appeal, once)-> PROPOSED (ruling re-examined)
 
 from genlayer import *
 import json
 
 MAX_OPTIONS = 10
 MAX_TEXT = 4000
+MAX_FEE_BPS = 500  # creator fee capped at 5%
 
 _PRINCIPLE = (
     "Outputs are equivalent if they agree on the winning_option value (including when it is the "
@@ -23,11 +27,6 @@ _PRINCIPLE = (
 
 
 # ------------------------------------------------------------------- helpers (deterministic)
-def _is_addr(a: str) -> bool:
-    a = a.strip()
-    return a.startswith("0x") and len(a) == 42
-
-
 def _is_url(u: str) -> bool:
     u = u.strip()
     return (u.startswith("http://") or u.startswith("https://")) and len(u) <= 2048
@@ -41,9 +40,15 @@ def _parse_json(raw: str):
     return json.loads(s[start:end + 1])
 
 
-def _resolve_prompt(question: str, options, source_text: str, criteria: str) -> str:
+def _resolve_prompt(question: str, options, source_text: str, criteria: str, appeal: bool) -> str:
     opts = "\n".join(f"{i}: {o}" for i, o in enumerate(options))
-    return f"""You are an impartial oracle resolving a prediction market based ONLY on the fetched source.
+    appeal_note = ""
+    if appeal:
+        appeal_note = (
+            "\nThis is an APPEAL of a prior ruling. Re-examine the source especially rigorously and "
+            "judge independently; do not simply defer to the earlier decision.\n"
+        )
+    return f"""You are an impartial oracle resolving a prediction market based ONLY on the fetched source.{appeal_note}
 
 Question:
 \"\"\"
@@ -79,13 +84,13 @@ class Delphi(gl.Contract):
     total_markets: u256
     total_open: u256
     total_resolved: u256
-    total_volume: u256                 # cumulative staked wei
-    markets: TreeMap[str, str]         # "m-<seq>"            -> Market JSON
-    market_index: TreeMap[str, str]    # str(seq)             -> market_id
-    stakes: TreeMap[str, str]          # "<mid>:<addr>:<idx>" -> amount (wei str)
-    staker_options: TreeMap[str, str]  # "<mid>:<addr>"       -> JSON list of option indexes
-    addr_markets: TreeMap[str, str]    # "<addr>"             -> JSON list of market_ids
-    claimed: TreeMap[str, str]         # "<mid>:<addr>"       -> "1" once claimed
+    total_volume: u256
+    markets: TreeMap[str, str]
+    market_index: TreeMap[str, str]
+    stakes: TreeMap[str, str]
+    staker_options: TreeMap[str, str]
+    addr_markets: TreeMap[str, str]
+    claimed: TreeMap[str, str]
 
     def __init__(self) -> None:
         self.total_markets = u256(0)
@@ -99,7 +104,7 @@ class Delphi(gl.Contract):
         self.addr_markets = TreeMap()
         self.claimed = TreeMap()
 
-    # -------------------------------------------------------- internal (undecorated) helpers
+    # -------------------------------------------------------- internal helpers
     def _get(self, market_id: str):
         raw = self.markets.get(market_id, "")
         if not raw:
@@ -119,19 +124,38 @@ class Delphi(gl.Contract):
             keys.append(market_id)
         self.addr_markets[address] = json.dumps(keys)
 
+    def _run_oracle(self, m: dict, appeal: bool) -> dict:
+        question = m["question"]
+        options = m["options"]
+        uri = m["source_uri"]
+        criteria = m["criteria"]
+
+        def judge() -> str:
+            page = gl.nondet.web.render(uri, mode="text")
+            return gl.nondet.exec_prompt(_resolve_prompt(question, options, page[:6000], criteria, appeal))
+
+        ruling = _parse_json(gl.eq_principle.prompt_comparative(judge, _PRINCIPLE))
+        for key, default in (("reasons", []), ("risk_flags", []), ("confidence", "LOW")):
+            if key not in ruling:
+                ruling[key] = default
+        return ruling
+
     # ----------------------------------------------------------------------------- writes
     @gl.public.write
-    def create_market(self, question: str, options_json: str, source_uri: str, criteria: str) -> str:
+    def create_market(self, question: str, options_json: str, source_uri: str, criteria: str, fee_bps: int) -> str:
         creator = str(gl.message.sender_address)
         q = question.strip()
         uri = source_uri.strip()
         crit = criteria.strip()
+        fee = int(fee_bps)
         if not q or len(q) > MAX_TEXT:
             raise gl.vm.UserError("invalid question")
         if not crit or len(crit) > MAX_TEXT:
             raise gl.vm.UserError("invalid criteria")
         if not _is_url(uri):
             raise gl.vm.UserError("invalid source_uri")
+        if fee < 0 or fee > MAX_FEE_BPS:
+            raise gl.vm.UserError("fee_bps must be between 0 and 500 (0-5%)")
         options = json.loads(options_json)
         if not isinstance(options, list) or len(options) < 2 or len(options) > MAX_OPTIONS:
             raise gl.vm.UserError("provide between 2 and 10 options")
@@ -146,9 +170,9 @@ class Delphi(gl.Contract):
         mid = f"m-{seq}"
         market = {
             "id": mid, "creator": creator, "question": q, "options": clean,
-            "source_uri": uri, "criteria": crit, "status": "OPEN",
+            "source_uri": uri, "criteria": crit, "fee_bps": fee, "status": "OPEN",
             "total_pool": "0", "pools": ["0"] * len(clean),
-            "winning_option": None, "ruling": None, "created_seq": seq,
+            "winning_option": None, "ruling": None, "appealed": False, "created_seq": seq,
         }
         self._save(market)
         self.market_index[str(seq)] = mid
@@ -198,32 +222,44 @@ class Delphi(gl.Contract):
 
     @gl.public.write
     def resolve(self, market_id: str) -> str:
+        # Propose a ruling (no payout yet) — opens the appeal window.
         m = self._get(market_id)
         if m["status"] != "CLOSED":
             raise gl.vm.UserError("market must be CLOSED before resolving")
-        question = m["question"]
-        options = m["options"]
-        uri = m["source_uri"]
-        criteria = m["criteria"]
+        m["ruling"] = self._run_oracle(m, False)
+        m["status"] = "PROPOSED"
+        self._save(m)
+        return json.dumps(m)
 
-        def judge() -> str:
-            page = gl.nondet.web.render(uri, mode="text")
-            return gl.nondet.exec_prompt(_resolve_prompt(question, options, page[:6000], criteria))
+    @gl.public.write
+    def appeal(self, market_id: str) -> str:
+        m = self._get(market_id)
+        sender = str(gl.message.sender_address)
+        if m["status"] != "PROPOSED":
+            raise gl.vm.UserError("only a proposed (not yet finalized) market can be appealed")
+        if m["appealed"]:
+            raise gl.vm.UserError("this market has already been appealed once")
+        # only someone who staked in THIS market may appeal
+        if not self.staker_options.get(f"{market_id}:{sender}", ""):
+            raise gl.vm.UserError("only a staker in this market may appeal")
+        m["ruling"] = self._run_oracle(m, True)
+        m["appealed"] = True
+        self._save(m)
+        return json.dumps(m)
 
-        ruling = _parse_json(gl.eq_principle.prompt_comparative(judge, _PRINCIPLE))
-        for key, default in (("reasons", []), ("risk_flags", []), ("confidence", "LOW")):
-            if key not in ruling:
-                ruling[key] = default
-        m["ruling"] = ruling
-
+    @gl.public.write
+    def finalize(self, market_id: str) -> str:
+        # Lock the proposed ruling in and open claims.
+        m = self._get(market_id)
+        if m["status"] != "PROPOSED":
+            raise gl.vm.UserError("market is not in a finalizable (PROPOSED) state")
+        ruling = m.get("ruling") or {}
         win = ruling.get("winning_option", "UNCLEAR")
-        valid_index = isinstance(win, int) and 0 <= win < len(options)
-        # Confidence gate: refund on UNCLEAR, low confidence, bad index, or an empty winning pool.
-        if not valid_index or ruling.get("confidence") == "LOW" or int(m["pools"][win]) == 0:
+        valid = isinstance(win, int) and 0 <= win < len(m["options"])
+        if not valid or ruling.get("confidence") == "LOW" or int(m["pools"][win]) == 0:
             m["status"] = "REFUNDING"
             self._save(m)
             return json.dumps(m)
-
         m["winning_option"] = win
         m["status"] = "RESOLVED"
         self._save(m)
@@ -245,10 +281,12 @@ class Delphi(gl.Contract):
             mine = int(self.stakes.get(f"{market_id}:{sender}:{win}", "0"))
             if mine == 0:
                 raise gl.vm.UserError("no winning stake to claim")
-            payout = mine * total_pool // winning_pool
+            gross = mine * total_pool // winning_pool
+            fee = gross * int(m.get("fee_bps", 0)) // 10000
             self.claimed[ckey] = "1"
-            self._pay(sender, payout)
-            return json.dumps({"market_id": market_id, "paid": str(payout), "kind": "winnings"})
+            self._pay(sender, gross - fee)
+            self._pay(m["creator"], fee)
+            return json.dumps({"market_id": market_id, "paid": str(gross - fee), "fee": str(fee), "kind": "winnings"})
 
         if m["status"] == "REFUNDING":
             total = 0
@@ -258,7 +296,7 @@ class Delphi(gl.Contract):
                 raise gl.vm.UserError("nothing to refund")
             self.claimed[ckey] = "1"
             self._pay(sender, total)
-            return json.dumps({"market_id": market_id, "paid": str(total), "kind": "refund"})
+            return json.dumps({"market_id": market_id, "paid": str(total), "fee": "0", "kind": "refund"})
 
         raise gl.vm.UserError("market is not claimable yet")
 
