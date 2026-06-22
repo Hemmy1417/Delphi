@@ -5,6 +5,7 @@ import "./globals.css";
 import { WalletProvider } from "@/lib/wallet";
 import { ConnectButton } from "@/components/ConnectButton";
 import { DelphiWordmark } from "@/components/Logo";
+import { ReloadToHome } from "@/components/ReloadToHome";
 import { CONTRACT_CONFIGURED, NETWORK_LABEL } from "@/lib/config";
 
 const saira = Saira_Condensed({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-saira" });
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${saira.variable} ${cormorant.variable} ${jetbrains.variable}`}>
       <body className="min-h-screen flex flex-col">
         <WalletProvider>
+          <ReloadToHome />
           <header className="sticky top-0 z-40 bg-canvas/85 backdrop-blur border-b border-hairline">
             <nav className="mx-auto max-w-6xl px-5 h-14 flex items-center justify-between">
               <Link href="/" className="hover:opacity-80 transition-opacity">
