@@ -1,0 +1,131 @@
+@import "tailwindcss";
+
+/* Bugatti-inspired system: pure-black canvas, monochrome austerity, no accent (only a rare
+   ice-blue link). Font trinity — Saira Condensed (uppercase tracked display) · Cormorant
+   Garamond (serif body) · JetBrains Mono (machined labels/nav/data). Weight 400 everywhere;
+   emphasis comes from size, tracking, and case. Rectangular; only buttons are pills. */
+:root {
+  --canvas: #000000;
+  --surface-soft: #0d0d0d;
+  --surface-card: #141414;
+  --surface-elevated: #1f1f1f;
+  --ink: #ffffff;
+  --body: #cccccc;
+  --body-strong: #e6e6e6;
+  --muted: #999999;
+  --muted-soft: #666666;
+  --hairline: #262626;
+  --hairline-strong: #3a3a3a;
+  --link: #c3d9f3;
+  --warning: #d4a017;
+  --success: #5fa657;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface-soft: var(--surface-soft);
+  --color-card: var(--surface-card);
+  --color-elevated: var(--surface-elevated);
+  --color-ink: var(--ink);
+  --color-body: var(--body);
+  --color-body-strong: var(--body-strong);
+  --color-muted: var(--muted);
+  --color-muted-soft: var(--muted-soft);
+  --color-hairline: var(--hairline);
+  --color-hairline-strong: var(--hairline-strong);
+  --color-link: var(--link);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+  --font-display: var(--font-saira);
+  --font-serif: var(--font-cormorant);
+  --font-mono: var(--font-jetbrains);
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--canvas);
+  color: var(--body);
+  font-family: var(--font-serif), Garamond, "Times New Roman", serif;
+  font-size: 1.0625rem;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: #ffffff; color: #000000; }
+
+/* ---- type ---- */
+.display {
+  font-family: var(--font-display), "Saira Condensed", system-ui, sans-serif;
+  font-weight: 400;
+  color: var(--ink);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 1.08;
+}
+.mono { font-family: var(--font-mono), ui-monospace, monospace; font-weight: 400; }
+.eyebrow {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+.wordmark {
+  font-family: var(--font-display), sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.42em;
+  font-weight: 400;
+}
+a.link { color: var(--link); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ---- surfaces ---- */
+.card { background: var(--surface-card); border: 1px solid var(--hairline); border-radius: 0; }
+.card-hover { transition: border-color 0.2s ease, background 0.2s ease; }
+.card-hover:hover { border-color: var(--hairline-strong); background: #181818; }
+
+/* ---- controls (transparent pill + 1px outline; mono uppercase) ---- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  background: transparent; color: var(--ink); border: 1px solid var(--ink);
+  border-radius: 9999px; padding: 13px 30px;
+  font-family: var(--font-mono), monospace; text-transform: uppercase;
+  letter-spacing: 0.18em; font-size: 0.8125rem;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+}
+.btn:hover { background: var(--ink); color: var(--canvas); }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn:disabled:hover { background: transparent; color: var(--ink); }
+
+.btn-ghost {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  background: transparent; color: var(--body); border: 1px solid var(--hairline-strong);
+  border-radius: 9999px; padding: 12px 26px;
+  font-family: var(--font-mono), monospace; text-transform: uppercase;
+  letter-spacing: 0.18em; font-size: 0.8125rem;
+  transition: border-color 0.18s ease, color 0.18s ease;
+}
+.btn-ghost:hover { border-color: var(--ink); color: var(--ink); }
+.btn-ghost:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* underline-only inputs */
+.field {
+  background: transparent; color: var(--ink); border: 0;
+  border-bottom: 1px solid var(--hairline-strong); border-radius: 0;
+  padding: 12px 2px; width: 100%;
+  font-family: var(--font-serif), serif; transition: border-color 0.18s ease;
+}
+.field::placeholder { color: var(--muted-soft); }
+.field:focus { outline: none; border-bottom-color: var(--ink); }
+
+.tag {
+  font-family: var(--font-mono), monospace; text-transform: uppercase;
+  letter-spacing: 0.18em; font-size: 0.65rem; color: var(--muted);
+}
+
+/* pool bar */
+.bar { height: 2px; background: var(--hairline); overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--ink); }
+
+@keyframes pulse-soft { 0%,100% { opacity: 0.35; } 50% { opacity: 1; } }
+.pulse-soft { animation: pulse-soft 1.4s ease-in-out infinite; }
