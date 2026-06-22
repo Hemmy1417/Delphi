@@ -3,8 +3,7 @@
 // Contract layer for the Delphi frontend.
 // READS use an internal read-only client; WRITES take the connected wallet's `client`.
 import { createClient, createAccount, generatePrivateKey } from "genlayer-js";
-import { studionet } from "genlayer-js/chains";
-import { CONTRACT_ADDRESS } from "./config";
+import { CONTRACT_ADDRESS, CHAIN } from "./config";
 
 export type Ruling = {
   winning_option: number | "UNCLEAR";
@@ -49,7 +48,7 @@ type Client = any;
 let _read: Client = null;
 function readClient(): Client {
   if (!_read) {
-    _read = createClient({ chain: studionet, account: createAccount(generatePrivateKey()) });
+    _read = createClient({ chain: CHAIN, account: createAccount(generatePrivateKey()) });
   }
   return _read;
 }

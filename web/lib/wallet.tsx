@@ -2,8 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { createClient } from "genlayer-js";
-import { studionet } from "genlayer-js/chains";
 import { getAddress } from "viem";
+import { CHAIN, CHAIN_HEX, CHAIN_RPC, CHAIN_NAME, GAS_SPONSORED } from "./config";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Client = any;
@@ -28,10 +28,7 @@ type WalletState = {
 };
 
 const Ctx = createContext<WalletState | null>(null);
-const CONNECTED_KEY = "aegis_connected_rdns";
-const STUDIONET_HEX = "0xF22F"; // 61999
-const CHAIN_NAME = "Studionet";
-const GAS_SPONSORED = true;
+const CONNECTED_KEY = "delphi_connected_rdns";
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [address, setAddress] = useState("");
@@ -72,13 +69,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     (raw: string, provider: Eip1193) => {
       const addr = getAddress(raw);
       providerRef.current = provider;
-      setClient(createClient({ chain: studionet, account: addr, provider }));
+      setClient(createClient({ chain: CHAIN, account: addr, provider }));
       setAddress(addr);
       const onAccounts = (accs: string[]) => {
         if (accs?.[0]) {
           const a = getAddress(accs[0]);
           setAddress(a);
-          setClient(createClient({ chain: studionet, account: a, provider }));
+          setClient(createClient({ chain: CHAIN, account: a, provider }));
         } else {
           disconnect();
         }
@@ -143,9 +140,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             method: "wallet_addEthereumChain",
             params: [
               {
-                chainId: STUDIONET_HEX,
-                chainName: "GenLayer Studionet",
-                rpcUrls: ["https://studio.genlayer.com/api"],
+                chainId: CHAIN_HEX,
+                chainName: CHAIN_NAME,
+                rpcUrls: [CHAIN_RPC],
                 nativeCurrency: { name: "GEN", symbol: "GEN", decimals: 18 },
               },
             ],
