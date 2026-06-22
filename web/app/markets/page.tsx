@@ -9,6 +9,7 @@ export default function MarketsPage() {
   const [markets, setMarkets] = useState<Market[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     Promise.all([listMarkets(40), getStats()])
@@ -16,6 +17,13 @@ export default function MarketsPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  const q = query.trim().toLowerCase();
+  const shown = q
+    ? markets.filter((m) =>
+        (m.question + " " + m.options.join(" ")).toLowerCase().includes(q),
+      )
+    : markets;
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-16">
@@ -34,16 +42,28 @@ export default function MarketsPage() {
         <Stat label="Volume" value={stats ? `${genFromWei(stats.total_volume)} GEN` : "—"} />
       </div>
 
-      <p className="eyebrow mt-12">{loading ? "Reading the chain…" : `${markets.length} markets`}</p>
+      <div className="flex items-end justify-between gap-4 flex-wrap mt-12">
+        <p className="eyebrow">{loading ? "Reading the chain…" : `${shown.length} market${shown.length === 1 ? "" : "s"}`}</p>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search markets…"
+          className="field mono text-sm max-w-xs"
+        />
+      </div>
 
       {markets.length === 0 && !loading ? (
         <div className="card p-16 mt-4 text-center">
           <p className="text-body">No markets yet.</p>
           <Link href="/new" className="btn mt-6">Create the first</Link>
         </div>
+      ) : shown.length === 0 ? (
+        <div className="card p-12 mt-4 text-center">
+          <p className="text-body">No markets match “{query}”.</p>
+        </div>
       ) : (
         <div className="mt-4 grid md:grid-cols-2 gap-px bg-hairline border border-hairline">
-          {markets.map((m) => {
+          {shown.map((m) => {
             const odds = impliedOdds(m.pools);
             const top = odds.indexOf(Math.max(...odds));
             return (

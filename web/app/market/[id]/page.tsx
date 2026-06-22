@@ -204,7 +204,9 @@ export default function MarketPage() {
         {error && <p className="mt-4 text-sm text-warning break-words">{error}</p>}
       </div>
 
-      <p className="mono text-xs text-muted mt-6">Created by {short(m.creator)}{isCreator ? " · you" : ""}</p>
+      <p className="mono text-xs text-muted mt-6">
+        Created by <Link href={`/u/${m.creator}`} className="link">{short(m.creator)}</Link>{isCreator ? " · you" : ""}
+      </p>
 
       {txHash && (
         <div className="card p-5 mt-4">
