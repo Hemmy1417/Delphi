@@ -16,6 +16,7 @@ export function explorerTxUrl(hash: string): string {
 export const STATUS_META: Record<string, { label: string; tone: "neutral" | "active" | "good" | "warn" }> = {
   OPEN: { label: "Open · staking live", tone: "active" },
   CLOSED: { label: "Closed · awaiting resolution", tone: "neutral" },
+  PROPOSED: { label: "Ruling proposed · appeal window", tone: "active" },
   RESOLVED: { label: "Resolved", tone: "good" },
   REFUNDING: { label: "Refunding · unclear", tone: "warn" },
 };

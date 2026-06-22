@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { STATUS_META, explorerTxUrl } from "./config";
 
 // Every status the contract can emit must have a UI label/tone, or a market renders blank.
-const CONTRACT_STATUSES = ["OPEN", "CLOSED", "RESOLVED", "REFUNDING"];
+const CONTRACT_STATUSES = ["OPEN", "CLOSED", "PROPOSED", "RESOLVED", "REFUNDING"];
 
 describe("status map", () => {
   it("covers every contract market status", () => {

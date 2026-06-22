@@ -3,9 +3,10 @@
 > Stake on the outcome of any real-world question. When it's settled, an AI-validator panel reads the
 > resolution source and pays the winners — no central oracle.
 
-**Status:** 🟢 **Phases 1–2 done.** Contract deployed + validated on-chain
-(`0x3b4c2716759457E0aE13241cB0243FEE204E205c`); the Next.js frontend (`web/`) is built on a
-Bugatti-inspired monochrome design and reads the live markets. Next: GitHub + Vercel deploy.
+**Status:** 🟢 **Built + validated on-chain.** Contract v2 deployed
+(`0x4f4218Ab3A39ecC10CfF8E83a0D43b1F6dDafEe4`) with creator fees + dispute appeals; the Next.js
+frontend (`web/`, Bugatti-inspired monochrome) reads the live markets and is wired to v2. Next:
+GitHub + Vercel deploy.
 
 ## Project summary
 Prediction markets need an **oracle** to decide what actually happened — normally a centralized,

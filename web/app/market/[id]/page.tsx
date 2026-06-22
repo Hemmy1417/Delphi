@@ -7,7 +7,7 @@ import { useWallet } from "@/lib/wallet";
 import { StatusBadge } from "@/components/StatusBadge";
 import { explorerTxUrl } from "@/lib/config";
 import {
-  getMarket, getPositions, stake, closeMarket, resolve, claim,
+  getMarket, getPositions, stake, closeMarket, resolve, appeal, finalize, claim,
   genFromWei, genToWei, impliedOdds, payoutMultiple, type Market, type Position,
 } from "@/lib/delphi";
 
@@ -91,6 +91,7 @@ export default function MarketPage() {
       <h1 className="display text-4xl sm:text-5xl mt-3 leading-tight" style={{ textTransform: "none" }}>{m.question}</h1>
       <p className="mono text-xs text-muted mt-4">{genFromWei(m.total_pool)} GEN pooled · resolves from{" "}
         <a href={m.source_uri} target="_blank" rel="noreferrer" className="link">the source ↗</a>
+        {m.fee_bps > 0 && <span> · {(m.fee_bps / 100).toFixed(m.fee_bps % 100 ? 2 : 0)}% creator fee</span>}
       </p>
       <p className="mt-4 text-body"><span className="eyebrow">Criteria</span><br />{m.criteria}</p>
 
@@ -130,17 +131,24 @@ export default function MarketPage() {
         })}
       </div>
 
-      {/* ruling */}
-      {m.ruling && (
-        <div className="card p-6 mt-6">
-          <p className="eyebrow">Oracle ruling{m.status === "REFUNDING" ? " · unclear" : ""}</p>
-          <p className="mono mt-2 text-ink">
-            {m.winning_option != null ? `Winner — option ${m.winning_option}: ${m.options[m.winning_option]}` : "UNCLEAR"}
-            <span className="text-muted ml-3 text-xs">{m.ruling.confidence} confidence</span>
-          </p>
-          {m.ruling.reasons?.[0] && <p className="mt-3 text-body text-[0.95rem] border-l border-hairline-strong pl-3">{m.ruling.reasons[0]}</p>}
-        </div>
-      )}
+      {/* ruling (proposed during PROPOSED, final once RESOLVED) */}
+      {m.ruling && (() => {
+        const proposed = typeof m.ruling.winning_option === "number" ? m.ruling.winning_option : null;
+        const winIdx = m.winning_option != null ? m.winning_option : proposed;
+        return (
+          <div className="card p-6 mt-6">
+            <p className="eyebrow">
+              {m.status === "PROPOSED" ? "Proposed ruling" : "Oracle ruling"}
+              {m.appealed ? " · appealed" : ""}{m.status === "REFUNDING" ? " · unclear" : ""}
+            </p>
+            <p className="mono mt-2 text-ink">
+              {winIdx != null ? `${m.status === "RESOLVED" ? "Winner" : "Proposed"} — option ${winIdx}: ${m.options[winIdx]}` : "UNCLEAR"}
+              <span className="text-muted ml-3 text-xs">{m.ruling.confidence} confidence</span>
+            </p>
+            {m.ruling.reasons?.[0] && <p className="mt-3 text-body text-[0.95rem] border-l border-hairline-strong pl-3">{m.ruling.reasons[0]}</p>}
+          </div>
+        );
+      })()}
 
       {/* actions */}
       <div className="card p-6 mt-6">
@@ -171,10 +179,26 @@ export default function MarketPage() {
 
         {m.status === "CLOSED" && (
           <div className="mt-4">
-            <p className="text-body text-[0.95rem]">Betting is closed. Trigger the AI-validator panel to read the source and rule the winner.</p>
+            <p className="text-body text-[0.95rem]">Betting is closed. Trigger the AI-validator panel to read the source and propose a ruling.</p>
             <button onClick={() => run("resolve", () => resolve(client, id))} disabled={!!busy} className="btn mt-4">
               {busy === "resolve" ? "Consulting the oracle…" : "Resolve market"}
             </button>
+          </div>
+        )}
+
+        {m.status === "PROPOSED" && (
+          <div className="mt-4">
+            <p className="text-body text-[0.95rem]">A ruling is proposed — funds haven&apos;t moved. Anyone can finalize to open claims; a staker may appeal once for a rigorous re-read first.</p>
+            <div className="mt-4 flex gap-3 flex-wrap">
+              <button onClick={() => run("finalize", () => finalize(client, id))} disabled={!!busy} className="btn">
+                {busy === "finalize" ? "Finalizing…" : "Finalize & open claims"}
+              </button>
+              {!m.appealed && hasAnyStake && (
+                <button onClick={() => run("appeal", () => appeal(client, id))} disabled={!!busy} className="btn-ghost">
+                  {busy === "appeal" ? "Re-reading…" : "Appeal the ruling"}
+                </button>
+              )}
+            </div>
           </div>
         )}
 

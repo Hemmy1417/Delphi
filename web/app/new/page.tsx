@@ -12,12 +12,16 @@ export default function NewMarketPage() {
   const [options, setOptions] = useState(["", ""]);
   const [sourceUri, setSourceUri] = useState("");
   const [criteria, setCriteria] = useState("");
+  const [feePct, setFeePct] = useState("0");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const clean = options.map((o) => o.trim()).filter(Boolean);
   const urlOk = /^https?:\/\/\S+/.test(sourceUri.trim());
-  const ready = question.trim().length > 0 && clean.length >= 2 && urlOk && criteria.trim().length > 0;
+  const fee = Number(feePct);
+  const feeOk = isFinite(fee) && fee >= 0 && fee <= 5;
+  const feeBps = Math.round((isFinite(fee) ? fee : 0) * 100);
+  const ready = question.trim().length > 0 && clean.length >= 2 && urlOk && criteria.trim().length > 0 && feeOk;
 
   function setOpt(i: number, v: string) {
     setOptions((prev) => prev.map((o, j) => (j === i ? v : o)));
@@ -27,7 +31,7 @@ export default function NewMarketPage() {
     if (!client) return;
     setError(""); setBusy(true);
     try {
-      await createMarket(client, question.trim(), clean, sourceUri.trim(), criteria.trim());
+      await createMarket(client, question.trim(), clean, sourceUri.trim(), criteria.trim(), feeBps);
       router.push("/markets");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -83,6 +87,15 @@ export default function NewMarketPage() {
         <div>
           <label className="eyebrow">How it resolves</label>
           <textarea value={criteria} onChange={(e) => setCriteria(e.target.value)} rows={3} placeholder="Resolves to the option named as the winner on the results page." className="field mt-2 resize-y" />
+        </div>
+
+        <div>
+          <label className="eyebrow">Creator fee (optional, 0–5%)</label>
+          <div className="flex items-center gap-2 mt-2 max-w-[10rem]">
+            <input value={feePct} onChange={(e) => setFeePct(e.target.value)} inputMode="decimal" className="field mono" />
+            <span className="mono text-muted">%</span>
+          </div>
+          <p className="mt-2 text-muted text-sm">Skimmed from winners&apos; payouts and paid to you when the market settles.</p>
         </div>
 
         <div className="pt-2">

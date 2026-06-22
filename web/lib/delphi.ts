@@ -20,11 +20,13 @@ export type Market = {
   options: string[];
   source_uri: string;
   criteria: string;
-  status: string; // OPEN | CLOSED | RESOLVED | REFUNDING
+  fee_bps: number; // creator fee in basis points (0–500)
+  status: string; // OPEN | CLOSED | PROPOSED | RESOLVED | REFUNDING
   total_pool: string; // wei
   pools: string[]; // wei per option
   winning_option: number | null;
   ruling: Ruling | null;
+  appealed: boolean;
   created_seq: number;
 };
 
@@ -97,8 +99,9 @@ export async function createMarket(
   options: string[],
   sourceUri: string,
   criteria: string,
+  feeBps: number,
 ): Promise<string> {
-  return writeAndWait(client, "create_market", [question, JSON.stringify(options), sourceUri, criteria]);
+  return writeAndWait(client, "create_market", [question, JSON.stringify(options), sourceUri, criteria, feeBps]);
 }
 
 // stake is payable — `value` is the stake, in wei.
@@ -110,6 +113,12 @@ export async function closeMarket(client: Client, marketId: string): Promise<str
 }
 export async function resolve(client: Client, marketId: string): Promise<string> {
   return writeAndWait(client, "resolve", [marketId]);
+}
+export async function appeal(client: Client, marketId: string): Promise<string> {
+  return writeAndWait(client, "appeal", [marketId]);
+}
+export async function finalize(client: Client, marketId: string): Promise<string> {
+  return writeAndWait(client, "finalize", [marketId]);
 }
 export async function claim(client: Client, marketId: string): Promise<string> {
   return writeAndWait(client, "claim", [marketId]);
