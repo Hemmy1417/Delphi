@@ -3,10 +3,13 @@
 > Stake on the outcome of any real-world question. When it's settled, an AI-validator panel reads the
 > resolution source and pays the winners — no central oracle.
 
-**Status:** 🟢 **Deployed on Testnet Bradbury.** Contract (creator fees + dispute appeals) live at
-`0xE51C7920fC1Dea17806E9b348444924df5c52348` on **Testnet Bradbury** (chain 4221); the Next.js
-frontend (`web/`, Bugatti-inspired monochrome) is wired to it. The app is network-switchable via
-`NEXT_PUBLIC_NETWORK` (`bradbury` | `studionet`). Next: GitHub + Vercel deploy.
+**Status:** 🟢 **Live.** Frontend deployed on Vercel, contract (creator fees + dispute appeals) on
+**Testnet Bradbury** (chain 4221) at `0xE51C7920fC1Dea17806E9b348444924df5c52348`. The Next.js
+frontend (`web/`, Bugatti-inspired monochrome) reads the live markets; network-switchable via
+`NEXT_PUBLIC_NETWORK` (`bradbury` | `studionet`).
+
+## Live demo
+**https://delphi-markets.vercel.app** — live on Vercel, reading the contract on Testnet Bradbury.
 
 ## Project summary
 Prediction markets need an **oracle** to decide what actually happened — normally a centralized,
