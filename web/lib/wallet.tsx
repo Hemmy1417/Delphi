@@ -30,6 +30,38 @@ type WalletState = {
 const Ctx = createContext<WalletState | null>(null);
 const CONNECTED_KEY = "delphi_connected_rdns";
 
+// Writes fail with a viem chainId mismatch unless the wallet's active chain is
+// CHAIN — switch first, and only add the chain if the wallet doesn't know it.
+async function ensureChain(provider: Eip1193): Promise<void> {
+  try {
+    await provider.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: CHAIN_HEX }],
+    });
+  } catch (err) {
+    const code = (err as { code?: number })?.code;
+    if (code === 4902) {
+      // Chain unknown to the wallet — add it (which also switches).
+      try {
+        await provider.request({
+          method: "wallet_addEthereumChain",
+          params: [
+            {
+              chainId: CHAIN_HEX,
+              chainName: CHAIN_NAME,
+              rpcUrls: [CHAIN_RPC],
+              nativeCurrency: { name: "GEN", symbol: "GEN", decimals: 18 },
+            },
+          ],
+        });
+      } catch {
+        /* declined — writes will surface the mismatch */
+      }
+    }
+    /* user declined the switch — continue; writes will surface the mismatch */
+  }
+}
+
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [address, setAddress] = useState("");
   const [client, setClient] = useState<Client | null>(null);
@@ -121,8 +153,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     if (!w) return;
     w.provider
       .request({ method: "eth_accounts" })
-      .then((accs: string[]) => {
-        if (accs?.[0]) bind(accs[0], w.provider);
+      .then(async (accs: string[]) => {
+        if (accs?.[0]) {
+          await ensureChain(w.provider);
+          bind(accs[0], w.provider);
+        }
       })
       .catch(() => {});
   }, [wallets, address, bind]);
@@ -135,21 +170,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       try {
         const accs: string[] = await pick.provider.request({ method: "eth_requestAccounts" });
         if (!accs?.[0]) throw new Error("No account selected.");
-        try {
-          await pick.provider.request({
-            method: "wallet_addEthereumChain",
-            params: [
-              {
-                chainId: CHAIN_HEX,
-                chainName: CHAIN_NAME,
-                rpcUrls: [CHAIN_RPC],
-                nativeCurrency: { name: "GEN", symbol: "GEN", decimals: 18 },
-              },
-            ],
-          });
-        } catch {
-          /* declined or already added — continue */
-        }
+        await ensureChain(pick.provider);
         bind(accs[0], pick.provider);
         localStorage.setItem(CONNECTED_KEY, pick.info.rdns);
       } finally {
