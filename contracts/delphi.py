@@ -21,8 +21,9 @@ MAX_TEXT = 4000
 MAX_FEE_BPS = 500  # creator fee capped at 5%
 
 _PRINCIPLE = (
-    "Outputs are equivalent if they agree on the winning_option value (including when it is the "
-    "string 'UNCLEAR'), even if the reasons are worded differently."
+    "Outputs are equivalent if they contain a winning_option field with the same value "
+    "(an integer index or the string 'UNCLEAR'), even if the confidence level, reasons, "
+    "risk_flags, or other fields differ in wording or content."
 )
 
 

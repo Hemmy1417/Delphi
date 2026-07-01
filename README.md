@@ -3,10 +3,9 @@
 > Stake on the outcome of any real-world question. When it's settled, an AI-validator panel reads the
 > resolution source and pays the winners — no central oracle.
 
-**Status:** 🟢 **Live.** Frontend deployed on Vercel, contract (creator fees + dispute appeals) on
-**Testnet Bradbury** (chain 4221) at `0xE51C7920fC1Dea17806E9b348444924df5c52348`. The Next.js
-frontend (`web/`, Bugatti-inspired monochrome) reads the live markets; network-switchable via
-`NEXT_PUBLIC_NETWORK` (`bradbury` | `studionet`).
+**Status:** **Live.** Frontend deployed on Vercel, contract (creator fees + dispute appeals) on
+**Studionet** (chain 61999) at `0xEBB920bA6a8Ac39ccee656c50000eDA4FbfbB718`. The Next.js
+frontend (`web/`, Bugatti-inspired monochrome) reads the live markets.
 
 ## Live demo
 **https://delphi-markets.vercel.app** — live on Vercel, reading the contract on Testnet Bradbury.
