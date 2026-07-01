@@ -61,7 +61,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <footer className="border-t border-hairline">
             <div className="mx-auto max-w-6xl px-5 py-12 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <DelphiWordmark />
-              <p className="eyebrow">The oracle decides · Sealed on GenLayer · {NETWORK_LABEL}</p>
+              <p className="eyebrow">The oracle decides · Sealed on GenLayer · Studionet</p>
             </div>
           </footer>
         </WalletProvider>
