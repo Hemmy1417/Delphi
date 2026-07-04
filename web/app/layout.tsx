@@ -5,6 +5,7 @@ import "./globals.css";
 import { WalletProvider } from "@/lib/wallet";
 import { ConnectButton } from "@/components/ConnectButton";
 import { DelphiWordmark } from "@/components/Logo";
+import { LiveBackdrop } from "@/components/LiveBackdrop";
 import { ReloadToHome } from "@/components/ReloadToHome";
 import { CONTRACT_CONFIGURED, NETWORK_LABEL } from "@/lib/config";
 
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${saira.variable} ${cormorant.variable} ${jetbrains.variable}`}>
       <body className="min-h-screen flex flex-col">
+        <LiveBackdrop />
         <WalletProvider>
           <ReloadToHome />
           <header className="sticky top-0 z-40 bg-canvas/85 backdrop-blur border-b border-hairline">
