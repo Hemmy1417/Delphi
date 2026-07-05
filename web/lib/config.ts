@@ -17,7 +17,10 @@ export const CONTRACT_CONFIGURED = /^0x[a-fA-F0-9]{40}$/.test(CONTRACT_ADDRESS);
 
 export const EXPLORER_URL = (
   process.env.NEXT_PUBLIC_EXPLORER_URL ||
-  CHAIN.blockExplorers?.default?.url ||
+  // genlayer-js's built-in default (genlayer-explorer.vercel.app) is dead
+  // (503). Prefer the live Studio explorer on studionet; Bradbury keeps the
+  // chain object's own explorer.
+  (IS_BRADBURY ? CHAIN.blockExplorers?.default?.url : "https://explorer-studio.genlayer.com") ||
   ""
 ).replace(/\/$/, "");
 
