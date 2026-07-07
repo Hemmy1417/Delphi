@@ -4,7 +4,10 @@
 > resolution source and pays the winners — no central oracle.
 
 **Status:** **Live.** Frontend deployed on Vercel, contract (creator fees + dispute appeals) on
-**Studionet** (chain 61999) at `0xEBB920bA6a8Ac39ccee656c50000eDA4FbfbB718`. The Next.js
+**Studionet** (chain 61999) at `0xeCCfe310516DceCC25797fDB901705a5d60CE462`. The Next.js
+
+> **Payout fix (July 2026).** Wallet payouts are sent as EVM external messages (an empty `@gl.evm.contract_interface` proxy executed by the contract's ghost account). The previous GenVM-call pattern errored at finalization on plain wallets and stranded the value; the contract was redeployed at the address above with the corrected transfer path.
+
 frontend (`web/`, Bugatti-inspired monochrome) reads the live markets.
 
 ## Live demo
