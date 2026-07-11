@@ -20,3 +20,7 @@ contracts/_*.py
 web/AGENTS.md
 web/CLAUDE.md
 web/DESIGN.md
+
+# python
+__pycache__/
+.pytest_cache/

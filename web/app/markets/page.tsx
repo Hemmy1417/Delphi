@@ -35,11 +35,14 @@ export default function MarketsPage() {
         <Link href="/new" className="btn">Create a market</Link>
       </div>
 
-      {/* stats strip */}
-      <div className="grid grid-cols-3 gap-px bg-hairline border border-hairline mt-10">
+      {/* stats strip — the escrow book is the solvency story, on-chain */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-px bg-hairline border border-hairline mt-10">
         <Stat label="Markets" value={stats ? `${stats.total_markets}` : "—"} />
         <Stat label="Live now" value={stats ? `${stats.total_open}` : "—"} />
         <Stat label="Volume" value={stats ? `${genFromWei(stats.total_volume)} GEN` : "—"} />
+        <Stat label="In escrow" value={stats ? `${genFromWei(stats.escrowed_wei ?? "0")} GEN` : "—"} />
+        <Stat label="Paid out" value={stats ? `${genFromWei(stats.paid_out_wei ?? "0")} GEN` : "—"} />
+        <Stat label="Appeals" value={stats ? `${stats.total_appeals ?? 0}` : "—"} />
       </div>
 
       <div className="flex items-end justify-between gap-4 flex-wrap mt-12">

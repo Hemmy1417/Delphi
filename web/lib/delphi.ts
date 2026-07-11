@@ -12,12 +12,18 @@ export type Ruling = {
   risk_flags: string[];
 };
 
+export type RulingRound = {
+  round: "initial" | "appeal";
+  ruling: Ruling;
+};
+
 export type Market = {
   id: string;
   creator: string;
   question: string;
   options: string[];
-  source_uri: string;
+  source_uris: string[]; // pinned at creation — 1-3 URLs, frozen forever
+  source_uri: string; // first pinned source (kept for older readers)
   criteria: string;
   fee_bps: number; // creator fee in basis points (0–500)
   status: string; // OPEN | CLOSED | PROPOSED | RESOLVED | REFUNDING
@@ -25,7 +31,12 @@ export type Market = {
   pools: string[]; // wei per option
   winning_option: number | null;
   ruling: Ruling | null;
+  history: RulingRound[]; // every consensus round, on-chain
+  resolver: string | null; // proposer — cannot finalize unappealed
   appealed: boolean;
+  appellant: string | null;
+  appeal_bond: string; // wei, held until finalize settles it
+  appeal_flipped: boolean;
   created_seq: number;
 };
 
@@ -40,6 +51,10 @@ export type Stats = {
   total_open: number;
   total_resolved: number;
   total_volume: string;
+  escrowed_wei: string;
+  paid_out_wei: string;
+  fees_paid_wei: string;
+  total_appeals: number;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -80,7 +95,24 @@ async function read(functionName: string, args: unknown[] = []): Promise<string>
 // ---- reads ----
 export async function getStats(): Promise<Stats> {
   const raw = await read("get_stats");
-  return raw ? JSON.parse(raw) : { total_markets: 0, total_open: 0, total_resolved: 0, total_volume: "0" };
+  return raw
+    ? JSON.parse(raw)
+    : {
+        total_markets: 0,
+        total_open: 0,
+        total_resolved: 0,
+        total_volume: "0",
+        escrowed_wei: "0",
+        paid_out_wei: "0",
+        fees_paid_wei: "0",
+        total_appeals: 0,
+      };
+}
+
+// The bond (wei) an appeal on this market currently requires: 1% of the pool, min 0.01 GEN.
+export async function getAppealBond(marketId: string): Promise<bigint> {
+  const raw = await read("get_appeal_bond", [marketId]);
+  return raw ? BigInt(JSON.parse(raw).bond_wei) : 0n;
 }
 
 export async function getMarket(id: string): Promise<Market | null> {
@@ -113,16 +145,26 @@ export async function createMarket(
   client: Client,
   question: string,
   options: string[],
-  sourceUri: string,
+  sourceUris: string[], // 1-3 URLs, pinned at creation
   criteria: string,
   feeBps: number,
 ): Promise<string> {
-  return writeAndWait(client, "create_market", [question, JSON.stringify(options), sourceUri, criteria, feeBps]);
+  return writeAndWait(client, "create_market", [
+    question,
+    JSON.stringify(options),
+    JSON.stringify(sourceUris),
+    criteria,
+    feeBps,
+  ]);
 }
 
 // stake is payable — `value` is the stake, in wei.
 export async function stake(client: Client, marketId: string, optionIdx: number, valueWei: bigint): Promise<string> {
   return writeAndWait(client, "stake", [marketId, optionIdx], valueWei);
+}
+// pull an entire position back out of an OPEN market.
+export async function unstake(client: Client, marketId: string): Promise<string> {
+  return writeAndWait(client, "unstake", [marketId]);
 }
 export async function closeMarket(client: Client, marketId: string): Promise<string> {
   return writeAndWait(client, "close_market", [marketId]);
@@ -130,8 +172,9 @@ export async function closeMarket(client: Client, marketId: string): Promise<str
 export async function resolve(client: Client, marketId: string): Promise<string> {
   return writeAndWait(client, "resolve", [marketId]);
 }
-export async function appeal(client: Client, marketId: string): Promise<string> {
-  return writeAndWait(client, "appeal", [marketId]);
+// appeal is payable — bondWei must cover get_appeal_bond's quote.
+export async function appeal(client: Client, marketId: string, bondWei: bigint): Promise<string> {
+  return writeAndWait(client, "appeal", [marketId], bondWei);
 }
 export async function finalize(client: Client, marketId: string): Promise<string> {
   return writeAndWait(client, "finalize", [marketId]);

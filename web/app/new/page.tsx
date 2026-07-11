@@ -5,33 +5,42 @@ import { useRouter } from "next/navigation";
 import { useWallet } from "@/lib/wallet";
 import { createMarket } from "@/lib/delphi";
 
+const MAX_SOURCES = 3;
+
 export default function NewMarketPage() {
   const router = useRouter();
   const { address, client, connect } = useWallet();
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState(["", ""]);
-  const [sourceUri, setSourceUri] = useState("");
+  const [sources, setSources] = useState([""]);
   const [criteria, setCriteria] = useState("");
   const [feePct, setFeePct] = useState("0");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const clean = options.map((o) => o.trim()).filter(Boolean);
-  const urlOk = /^https?:\/\/\S+/.test(sourceUri.trim());
+  const cleanSources = sources.map((s) => s.trim()).filter(Boolean);
+  const urlsOk =
+    cleanSources.length >= 1 &&
+    cleanSources.every((s) => /^https?:\/\/\S+/.test(s)) &&
+    new Set(cleanSources).size === cleanSources.length;
   const fee = Number(feePct);
   const feeOk = isFinite(fee) && fee >= 0 && fee <= 5;
   const feeBps = Math.round((isFinite(fee) ? fee : 0) * 100);
-  const ready = question.trim().length > 0 && clean.length >= 2 && urlOk && criteria.trim().length > 0 && feeOk;
+  const ready = question.trim().length > 0 && clean.length >= 2 && urlsOk && criteria.trim().length > 0 && feeOk;
 
   function setOpt(i: number, v: string) {
     setOptions((prev) => prev.map((o, j) => (j === i ? v : o)));
+  }
+  function setSrc(i: number, v: string) {
+    setSources((prev) => prev.map((s, j) => (j === i ? v : s)));
   }
 
   async function onCreate() {
     if (!client) return;
     setError(""); setBusy(true);
     try {
-      await createMarket(client, question.trim(), clean, sourceUri.trim(), criteria.trim(), feeBps);
+      await createMarket(client, question.trim(), clean, cleanSources, criteria.trim(), feeBps);
       router.push("/markets");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -79,9 +88,28 @@ export default function NewMarketPage() {
         </div>
 
         <div>
-          <label className="eyebrow">Resolution source (URL)</label>
-          <input value={sourceUri} onChange={(e) => setSourceUri(e.target.value)} placeholder="https://… a public, anonymously-fetchable page" className="field mono mt-2 text-sm" />
-          <p className="mt-2 text-muted text-sm">The AI fetches this page to decide. Pick a stable, public source — Wikipedia, official results, GitHub stats. Login-walled pages (X, Discord) can&apos;t be read.</p>
+          <label className="eyebrow">Resolution sources (1–{MAX_SOURCES} URLs, pinned forever)</label>
+          <div className="mt-3 space-y-3">
+            {sources.map((s, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <span className="mono text-muted text-xs w-4">{i + 1}</span>
+                <input value={s} onChange={(e) => setSrc(i, e.target.value)} placeholder="https://… a public, anonymously-fetchable page" className="field mono text-sm" />
+                {sources.length > 1 && (
+                  <button onClick={() => setSources((p) => p.filter((_, j) => j !== i))} className="mono text-muted hover:text-ink text-xs" aria-label="remove source">✕</button>
+                )}
+              </div>
+            ))}
+          </div>
+          {sources.length < MAX_SOURCES && (
+            <button onClick={() => setSources((p) => [...p, ""])} className="mono text-[0.65rem] uppercase tracking-[0.18em] text-muted hover:text-ink mt-3">+ add a corroborating source</button>
+          )}
+          <p className="mt-2 text-muted text-sm">
+            These URLs are <span className="text-ink">frozen the moment the market is created</span> — nobody, you included,
+            can swap the evidence after money is staked. The AI reads all of them and they must corroborate. Prefer stable,
+            anonymously-fetchable pages (Wikipedia, official results, keyless JSON APIs); login-walled or bot-blocked pages
+            (X, Discord, many explorers) can&apos;t be read and will push the market toward refunds. A second source keeps
+            one dead link from sinking the resolution.
+          </p>
         </div>
 
         <div>
@@ -102,7 +130,7 @@ export default function NewMarketPage() {
           <button onClick={onCreate} disabled={!ready || busy} className="btn">
             {busy ? "Creating…" : "Create market"}
           </button>
-          {!ready && <p className="mono text-xs text-muted mt-3">Need a question, 2+ options, a valid source URL, and criteria.</p>}
+          {!ready && <p className="mono text-xs text-muted mt-3">Need a question, 2+ options, 1–3 valid unique source URLs, and criteria.</p>}
           {error && <p className="mt-4 text-sm text-warning break-words">{error}</p>}
         </div>
       </div>

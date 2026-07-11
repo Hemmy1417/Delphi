@@ -7,7 +7,7 @@ import { useWallet } from "@/lib/wallet";
 import { StatusBadge } from "@/components/StatusBadge";
 import { explorerTxUrl } from "@/lib/config";
 import {
-  getMarket, getPositions, stake, closeMarket, resolve, appeal, finalize, claim,
+  getMarket, getPositions, getAppealBond, stake, unstake, closeMarket, resolve, appeal, finalize, claim,
   genFromWei, genToWei, impliedOdds, payoutMultiple, type Market, type Position,
 } from "@/lib/delphi";
 
@@ -22,6 +22,7 @@ export default function MarketPage() {
 
   const [market, setMarket] = useState<Market | null>(null);
   const [pos, setPos] = useState<Position | null>(null);
+  const [bond, setBond] = useState<bigint>(0n);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -33,6 +34,9 @@ export default function MarketPage() {
     try {
       const m = await getMarket(id);
       setMarket(m);
+      if (m?.status === "PROPOSED" && !m.appealed) {
+        getAppealBond(id).then(setBond).catch(() => setBond(0n));
+      }
       if (address) {
         const ps = await getPositions(address);
         setPos(ps.find((p) => p.market_id === id) ?? null);
@@ -76,9 +80,12 @@ export default function MarketPage() {
   const m = market;
   const odds = impliedOdds(m.pools);
   const isCreator = !!address && address.toLowerCase() === m.creator.toLowerCase();
+  const isResolver = !!address && !!m.resolver && address.toLowerCase() === m.resolver.toLowerCase();
+  const sources = m.source_uris?.length ? m.source_uris : [m.source_uri];
   const myStake = (opt: number) => pos?.stakes.find((s) => s.option === opt)?.amount ?? "0";
   const hasAnyStake = (pos?.stakes.length ?? 0) > 0;
   const wonOnWinner = m.status === "RESOLVED" && m.winning_option != null && Number(myStake(m.winning_option)) > 0;
+  const history = m.history?.length ? m.history : m.ruling ? [{ round: "initial" as const, ruling: m.ruling }] : [];
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-16">
@@ -89,11 +96,27 @@ export default function MarketPage() {
         <StatusBadge status={m.status} />
       </div>
       <h1 className="display text-4xl sm:text-5xl mt-3 leading-tight" style={{ textTransform: "none" }}>{m.question}</h1>
-      <p className="mono text-xs text-muted mt-4">{genFromWei(m.total_pool)} GEN pooled · resolves from{" "}
-        <a href={m.source_uri} target="_blank" rel="noreferrer" className="link">the source ↗</a>
+      <p className="mono text-xs text-muted mt-4">
+        {genFromWei(m.total_pool)} GEN pooled
         {m.fee_bps > 0 && <span> · {(m.fee_bps / 100).toFixed(m.fee_bps % 100 ? 2 : 0)}% creator fee</span>}
       </p>
       <p className="mt-4 text-body"><span className="eyebrow">Criteria</span><br />{m.criteria}</p>
+
+      {/* pinned evidence — frozen at creation, nobody can swap it */}
+      <div className="card p-5 mt-6">
+        <p className="eyebrow">Pinned resolution sources · frozen at creation</p>
+        <div className="mt-2 space-y-1">
+          {sources.map((s, i) => (
+            <p key={i} className="mono text-xs break-all">
+              <span className="text-muted mr-2">{i + 1}</span>
+              <a href={s} target="_blank" rel="noreferrer" className="link">{s} ↗</a>
+            </p>
+          ))}
+        </div>
+        <p className="mono text-[0.65rem] text-muted mt-3">
+          The oracle reads only these URLs — locked before the first stake, corroboration required.
+        </p>
+      </div>
 
       {/* options + pools */}
       <div className="card mt-8">
@@ -131,24 +154,33 @@ export default function MarketPage() {
         })}
       </div>
 
-      {/* ruling (proposed during PROPOSED, final once RESOLVED) */}
-      {m.ruling && (() => {
-        const proposed = typeof m.ruling.winning_option === "number" ? m.ruling.winning_option : null;
-        const winIdx = m.winning_option != null ? m.winning_option : proposed;
-        return (
-          <div className="card p-6 mt-6">
-            <p className="eyebrow">
-              {m.status === "PROPOSED" ? "Proposed ruling" : "Oracle ruling"}
-              {m.appealed ? " · appealed" : ""}{m.status === "REFUNDING" ? " · unclear" : ""}
-            </p>
-            <p className="mono mt-2 text-ink">
-              {winIdx != null ? `${m.status === "RESOLVED" ? "Winner" : "Proposed"} — option ${winIdx}: ${m.options[winIdx]}` : "UNCLEAR"}
-              <span className="text-muted ml-3 text-xs">{m.ruling.confidence} confidence</span>
-            </p>
-            {m.ruling.reasons?.[0] && <p className="mt-3 text-body text-[0.95rem] border-l border-hairline-strong pl-3">{m.ruling.reasons[0]}</p>}
-          </div>
-        );
-      })()}
+      {/* ruling history — every consensus round, on-chain */}
+      {history.length > 0 && (
+        <div className="card p-6 mt-6">
+          <p className="eyebrow">
+            {m.status === "PROPOSED" ? "Proposed ruling" : "Oracle ruling"}
+            {m.appealed ? ` · appealed${m.appeal_flipped ? " · flipped" : " · upheld"}` : ""}
+            {m.status === "REFUNDING" ? " · unclear" : ""}
+          </p>
+          {history.map((h, i) => {
+            const w = h.ruling.winning_option;
+            const idx = typeof w === "number" ? w : null;
+            const isLatest = i === history.length - 1;
+            return (
+              <div key={i} className={`mt-3 ${i > 0 ? "border-t border-hairline pt-3" : ""} ${isLatest ? "" : "opacity-55"}`}>
+                <p className="mono text-[0.6rem] uppercase tracking-[0.15em] text-muted">
+                  Round {i + 1} · {h.round}{isLatest && history.length > 1 ? " · final" : ""}
+                </p>
+                <p className="mono mt-1 text-ink">
+                  {idx != null ? `Option ${idx}: ${m.options[idx]}` : "UNCLEAR"}
+                  <span className="text-muted ml-3 text-xs">{h.ruling.confidence} confidence</span>
+                </p>
+                {h.ruling.reasons?.[0] && <p className="mt-2 text-body text-[0.95rem] border-l border-hairline-strong pl-3">{h.ruling.reasons[0]}</p>}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* actions */}
       <div className="card p-6 mt-6">
@@ -169,36 +201,60 @@ export default function MarketPage() {
                 {busy === "stake" ? "Staking…" : "Place stake"}
               </button>
             </div>
-            {isCreator && (
-              <button onClick={() => run("close", () => closeMarket(client, id))} disabled={!!busy} className="btn-ghost mt-5 text-[0.7rem]">
-                {busy === "close" ? "Closing…" : "Close betting (creator)"}
-              </button>
+            <div className="mt-5 flex gap-3 flex-wrap items-center">
+              {isCreator && (
+                <button onClick={() => run("close", () => closeMarket(client, id))} disabled={!!busy} className="btn-ghost text-[0.7rem]">
+                  {busy === "close" ? "Closing…" : "Close betting (creator)"}
+                </button>
+              )}
+              {hasAnyStake && (
+                <button onClick={() => run("unstake", () => unstake(client, id))} disabled={!!busy} className="btn-ghost text-[0.7rem]">
+                  {busy === "unstake" ? "Withdrawing…" : "Withdraw my stake"}
+                </button>
+              )}
+            </div>
+            {hasAnyStake && (
+              <p className="mono text-[0.65rem] text-muted mt-2">You can pull your whole position out any time before betting closes — funds are never trapped.</p>
             )}
           </div>
         )}
 
         {m.status === "CLOSED" && (
           <div className="mt-4">
-            <p className="text-body text-[0.95rem]">Betting is closed. Trigger the AI-validator panel to read the source and propose a ruling.</p>
+            <p className="text-body text-[0.95rem]">Betting is closed. Trigger the AI-validator panel to read the pinned sources and propose a ruling.</p>
             <button onClick={() => run("resolve", () => resolve(client, id))} disabled={!!busy} className="btn mt-4">
               {busy === "resolve" ? "Consulting the oracle…" : "Resolve market"}
             </button>
+            <p className="mono text-[0.65rem] text-muted mt-3">Whoever proposes the ruling cannot also finalize it — the appeal window can&apos;t be sniped shut.</p>
           </div>
         )}
 
         {m.status === "PROPOSED" && (
           <div className="mt-4">
-            <p className="text-body text-[0.95rem]">A ruling is proposed — funds haven&apos;t moved. Anyone can finalize to open claims; a staker may appeal once for a rigorous re-read first.</p>
+            <p className="text-body text-[0.95rem]">
+              A ruling is proposed — funds haven&apos;t moved.{" "}
+              {m.appealed
+                ? "The appeal has run; anyone can finalize to open claims."
+                : "A staker may appeal once (bonded) before anyone else finalizes."}
+            </p>
             <div className="mt-4 flex gap-3 flex-wrap">
-              <button onClick={() => run("finalize", () => finalize(client, id))} disabled={!!busy} className="btn">
+              <button onClick={() => run("finalize", () => finalize(client, id))} disabled={!!busy || (isResolver && !m.appealed)} className="btn">
                 {busy === "finalize" ? "Finalizing…" : "Finalize & open claims"}
               </button>
               {!m.appealed && hasAnyStake && (
-                <button onClick={() => run("appeal", () => appeal(client, id))} disabled={!!busy} className="btn-ghost">
-                  {busy === "appeal" ? "Re-reading…" : "Appeal the ruling"}
+                <button onClick={() => run("appeal", () => appeal(client, id, bond))} disabled={!!busy || bond === 0n} className="btn-ghost">
+                  {busy === "appeal" ? "Re-reading…" : `Appeal (bond ${genFromWei(bond)} GEN)`}
                 </button>
               )}
             </div>
+            {isResolver && !m.appealed && (
+              <p className="mono text-[0.65rem] text-muted mt-3">You proposed this ruling, so another wallet must finalize it — that&apos;s the appeal window.</p>
+            )}
+            {!m.appealed && hasAnyStake && (
+              <p className="mono text-[0.65rem] text-muted mt-3">
+                The bond (1% of the pool, min 0.01 GEN) returns if your appeal changes the outcome; if the ruling is upheld it joins the winners&apos; pool.
+              </p>
+            )}
           </div>
         )}
 
@@ -230,6 +286,8 @@ export default function MarketPage() {
 
       <p className="mono text-xs text-muted mt-6">
         Created by <Link href={`/u/${m.creator}`} className="link">{short(m.creator)}</Link>{isCreator ? " · you" : ""}
+        {m.resolver && <span> · ruling proposed by {short(m.resolver)}{isResolver ? " (you)" : ""}</span>}
+        {m.appellant && <span> · appealed by {short(m.appellant)}</span>}
       </p>
 
       {txHash && (
