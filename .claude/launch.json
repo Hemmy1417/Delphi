@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "delphi-web", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev", "--", "-p", "3800"], "port": 3800, "cwd": "web" }
+  ]
+}

@@ -38,6 +38,31 @@ export type Market = {
   appeal_bond: string; // wei, held until finalize settles it
   appeal_flipped: boolean;
   created_seq: number;
+  close_at_epoch?: number; // scheduled close (unix epoch; 0 = manual only)
+  appeal_open_until_epoch?: number; // enforced appeal deadline (unix epoch)
+};
+
+// Internet-Court case file: a multi-outcome panel brief, appended per filing.
+export type CaseBrief = {
+  summary: string;
+  evidence: { source: string; finding: string }[];
+  arguments: { option: number; points: string[] }[];
+  recent_developments: string[];
+  precedents: string[];
+  implied_distribution: number[]; // one probability per option (sums ~100)
+  confidence: string;
+};
+export type CaseFile = {
+  index: number;
+  at_epoch: number; // 0 = clock unreachable at filing
+  pools: string[]; // market pools at filing time
+  status: string;
+  filed_by: string;
+  brief: CaseBrief;
+};
+export type Draft = {
+  topic: string; question: string; options: string[]; criteria: string;
+  sources: string[]; ambiguity_warnings: string[]; edge_cases: string[];
 };
 
 export type Position = {
@@ -129,6 +154,18 @@ export async function getPositions(address: string): Promise<Position[]> {
   const raw = await read("get_positions", [address]);
   return raw ? JSON.parse(raw) : [];
 }
+export async function getCaseFiles(marketId: string): Promise<CaseFile[]> {
+  const raw = await read("get_case_files", [marketId]);
+  return raw ? (JSON.parse(raw) as CaseFile[]) : [];
+}
+export async function getOddsHistory(marketId: string): Promise<string[][]> {
+  const raw = await read("get_odds_history", [marketId]);
+  return raw ? (JSON.parse(raw) as string[][]) : [];
+}
+export async function getDraft(address: string): Promise<Draft | null> {
+  const raw = await read("get_draft", [address]);
+  return raw ? (JSON.parse(raw) as Draft) : null;
+}
 
 // ---- writes ----
 async function writeAndWait(client: Client, functionName: string, args: unknown[], value?: bigint) {
@@ -148,6 +185,7 @@ export async function createMarket(
   sourceUris: string[], // 1-3 URLs, pinned at creation
   criteria: string,
   feeBps: number,
+  closeAtEpoch = 0,
 ): Promise<string> {
   return writeAndWait(client, "create_market", [
     question,
@@ -155,7 +193,19 @@ export async function createMarket(
     JSON.stringify(sourceUris),
     criteria,
     feeBps,
+    closeAtEpoch,
   ]);
+}
+// a real validator investigation (~60-90s): fetches the pinned sources and files
+// a fresh multi-outcome brief on-chain. Non-payable, permissionless.
+export async function buildCaseFile(client: Client, marketId: string): Promise<string> {
+  return writeAndWait(client, "build_case_file", [marketId]);
+}
+export async function cancelMarket(client: Client, marketId: string): Promise<string> {
+  return writeAndWait(client, "cancel_market", [marketId]);
+}
+export async function suggestMarket(client: Client, topic: string, hint: string): Promise<string> {
+  return writeAndWait(client, "suggest_market", [topic, hint]);
 }
 
 // stake is payable — `value` is the stake, in wei.

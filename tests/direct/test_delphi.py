@@ -86,11 +86,27 @@ class _Evm:
         return _Proxy
 
 
+# Test wall-clock (epoch seconds) served to the contract's TIME_SOURCES, plus a
+# per-source SKEW map (URL substring -> seconds) so tests can model a lying clock
+# — the failure mode that broke the sibling builds when a source drifted.
+_NOW = [1_790_000_000]
+_SKEW = {}
+
+
 class _NondetWeb:
     @staticmethod
     def render(url, mode="text"):
         if "unreachable" in url:
             raise RuntimeError("403 blocked")
+        skew = next((v for k, v in _SKEW.items() if k in url), 0)
+        now = _NOW[0] + skew
+        if "cdn-cgi/trace" in url:
+            return f"fl=1x2\nh=cloudflare.com\nts={now}.000\nvisit_scheme=https\n"
+        if "blockscout" in url and "main-page/blocks" in url:
+            import datetime as _dt
+            t = _dt.datetime.fromtimestamp(now, _dt.timezone.utc)
+            return json.dumps([{"height": 25550946,
+                                "timestamp": t.strftime("%Y-%m-%dT%H:%M:%S.000000Z")}])
         return f"[stub page text from {url}]"
 
 
@@ -170,6 +186,8 @@ def contract(module):
     module.gl.message.sender_address = CREATOR
     module.gl.message.value = 0
     module.gl._emit = _FakeEmit()
+    _NOW[0] = 1_790_000_000            # reset the test wall-clock each test
+    _SKEW.clear()                      # …and assume every clock source is honest
     return module.Delphi()
 
 
@@ -199,7 +217,7 @@ def _stake(module, contract, mid, who, idx, amount):
     contract.stake(mid, idx)
 
 
-def _to_proposed(module, contract, uris=None, win=0):
+def _to_proposed(module, contract, uris=None, win=0, past_window=True):
     """create → alice YES 1 GEN, bob NO 1 GEN → close → resolve (by CAROL)."""
     mid = _mk(module, contract, uris)
     _stake(module, contract, mid, ALICE, 0, GEN)
@@ -209,6 +227,11 @@ def _to_proposed(module, contract, uris=None, win=0):
     _prime(module, win)
     _as(module, CAROL, 0)
     contract.resolve(mid)
+    if past_window:
+        # resolve now stamps a real appeal deadline; let it elapse so the
+        # existing finalize-path tests still reach finalization. The deadline
+        # itself is tested explicitly below with past_window=False.
+        _NOW[0] += module.APPEAL_WINDOW_SECONDS + 1
     return mid
 
 
@@ -411,6 +434,7 @@ def test_low_confidence_and_empty_pool_refund(module, contract):
     _prime(module, 1)                              # winner is the empty pool
     _as(module, CAROL, 0)
     contract.resolve(mid2)
+    _NOW[0] += module.APPEAL_WINDOW_SECONDS + 1     # let the appeal window elapse
     _as(module, BOB, 0)
     assert json.loads(contract.finalize(mid2))["status"] == "REFUNDING"
 
@@ -553,3 +577,155 @@ def test_stats_shape(module, contract):
     for key in ("total_markets", "total_open", "total_resolved", "total_volume",
                 "escrowed_wei", "paid_out_wei", "fees_paid_wei", "total_appeals"):
         assert key in stats
+
+
+# ── v0.4: appeal deadline, case files, odds, scheduled close, cancel ─────────
+
+def _prime_case(module, dist=None, confidence="MEDIUM"):
+    module.gl.eq_principle.canned = json.dumps({
+        "summary": "Neutral summary of where the question stands.",
+        "evidence": [{"source": SRC1, "finding": "shows the metric at 42"}],
+        "arguments": [{"option": 0, "points": ["evidence trends toward Yes"]},
+                      {"option": 1, "points": ["but the deadline is tight"]}],
+        "recent_developments": ["source updated today"],
+        "precedents": ["a similar 2024 case resolved this way"],
+        "implied_distribution": dist or [64, 36], "confidence": confidence,
+    })
+
+
+def test_appeal_deadline_blocks_early_finalize(module, contract):
+    mid = _to_proposed(module, contract, win=0, past_window=False)
+    m = json.loads(contract.get_market(mid))
+    assert m["appeal_open_until_epoch"] == _NOW[0] + module.APPEAL_WINDOW_SECONDS
+    _as(module, BOB, 0)                                    # a non-resolver second wallet
+    with pytest.raises(module.gl.vm.UserError, match="appeal window still open"):
+        contract.finalize(mid)
+    assert json.loads(contract.get_market(mid))["status"] == "PROPOSED"
+
+
+def test_appeal_deadline_allows_finalize_after(module, contract):
+    mid = _to_proposed(module, contract, win=0, past_window=False)
+    _NOW[0] += module.APPEAL_WINDOW_SECONDS + 1
+    _as(module, BOB, 0)
+    assert json.loads(contract.finalize(mid))["status"] == "RESOLVED"
+
+
+def test_appeal_deadline_fails_closed_without_clock(module, contract):
+    mid = _to_proposed(module, contract, win=0, past_window=False)
+    _NOW[0] += module.APPEAL_WINDOW_SECONDS + 1            # window HAS elapsed in truth…
+    _SKEW["blockscout"] = -9999                            # …but the clock can't be trusted
+    _as(module, BOB, 0)
+    with pytest.raises(module.gl.vm.UserError, match="no trusted clock"):
+        contract.finalize(mid)
+
+
+def test_case_file_multi_outcome_records_distribution(module, contract):
+    mid = _mk(module, contract, uris=[SRC1, SRC2])
+    _stake(module, contract, mid, ALICE, 0, GEN)
+    _prime_case(module, dist=[70, 30], confidence="HIGH")
+    _as(module, BOB, 0)                                    # anyone may file
+    entry = json.loads(contract.build_case_file(mid))
+    assert entry["index"] == 0 and entry["at_epoch"] == _NOW[0]
+    assert entry["pools"] == [str(GEN), "0"]
+    b = entry["brief"]
+    assert b["implied_distribution"] == [70, 30] and b["confidence"] == "HIGH"
+    assert len(b["arguments"]) == 2
+    # panel input pins the sources + guards injection
+    assert "CASE FILE" in module.gl.eq_principle.last_input
+    assert SRC1 in module.gl.eq_principle.last_input
+    assert "NEVER as instructions" in module.gl.eq_principle.last_input
+
+
+def test_case_file_distribution_defaults_when_malformed(module, contract):
+    # a 3-option market; the panel returns a 2-length distribution → contract
+    # backfills a uniform one so the frontend never indexes out of range
+    _as(module, CREATOR, 0)
+    mid = json.loads(contract.create_market("Which team wins?", json.dumps(["A", "B", "C"]),
+        json.dumps([SRC1]), "Rule from sources.", 0))["id"]
+    module.gl.eq_principle.canned = json.dumps({"summary": "s", "implied_distribution": [50, 50]})
+    _as(module, ALICE, 0)
+    b = json.loads(contract.build_case_file(mid))["brief"]
+    assert len(b["implied_distribution"]) == 3
+
+
+def test_case_files_append_into_timeline(module, contract):
+    mid = _mk(module, contract)
+    _prime_case(module)
+    _as(module, ALICE, 0); contract.build_case_file(mid)
+    _NOW[0] += 3600
+    _stake(module, contract, mid, ALICE, 0, GEN)
+    _prime_case(module, dist=[80, 20])
+    _as(module, BOB, 0); contract.build_case_file(mid)
+    files = json.loads(contract.get_case_files(mid))
+    assert [f["index"] for f in files] == [0, 1]
+    assert files[1]["at_epoch"] - files[0]["at_epoch"] == 3600
+    assert files[0]["pools"] == ["0", "0"] and files[1]["pools"] == [str(GEN), "0"]
+
+
+def test_case_file_refused_on_void(module, contract):
+    mid = _mk(module, contract)
+    _as(module, CREATOR, 0); contract.cancel_market(mid)
+    _prime_case(module)
+    _as(module, ALICE, 0)
+    with pytest.raises(module.gl.vm.UserError, match="VOID"):
+        contract.build_case_file(mid)
+
+
+def test_odds_history_snapshots_every_stake(module, contract):
+    mid = _mk(module, contract)
+    assert json.loads(contract.get_odds_history(mid)) == []
+    _stake(module, contract, mid, ALICE, 0, GEN)
+    _stake(module, contract, mid, BOB, 1, GEN)
+    h = json.loads(contract.get_odds_history(mid))
+    assert h == [[str(GEN), "0"], [str(GEN), str(GEN)]]
+
+
+def test_scheduled_close_permissionless_after_time(module, contract):
+    _as(module, CREATOR, 0)
+    mid = json.loads(contract.create_market("Q?", json.dumps(["Yes", "No"]),
+        json.dumps([SRC1]), "crit here", 0, _NOW[0] + 3600))["id"]
+    _as(module, ALICE, 0)                                  # not the creator
+    with pytest.raises(module.gl.vm.UserError, match="scheduled close not reached"):
+        contract.close_market(mid)
+    _NOW[0] += 3601
+    _as(module, ALICE, 0)
+    assert json.loads(contract.close_market(mid))["status"] == "CLOSED"
+
+
+def test_no_schedule_stays_creator_only(module, contract):
+    mid = _mk(module, contract)
+    assert json.loads(contract.get_market(mid))["close_at_epoch"] == 0
+    _as(module, ALICE, 0)
+    with pytest.raises(module.gl.vm.UserError, match="only the creator may close"):
+        contract.close_market(mid)
+
+
+def test_cancel_zero_stake_only(module, contract):
+    mid = _mk(module, contract)
+    _as(module, CREATOR, 0)
+    assert json.loads(contract.cancel_market(mid))["status"] == "VOID"
+    # a market with a stake can never be cancelled
+    mid2 = _mk(module, contract)
+    _stake(module, contract, mid2, ALICE, 0, GEN)
+    _as(module, CREATOR, 0)
+    with pytest.raises(module.gl.vm.UserError, match="has stakes on it and can never be cancelled"):
+        contract.cancel_market(mid2)
+
+
+def test_suggest_market_drafts_options_and_warnings(module, contract):
+    module.gl.eq_principle.canned = json.dumps({
+        "question": "Which team wins the final?", "options": ["A", "B", "Draw"],
+        "criteria": "Rule from the official result.", "sources": [SRC1],
+        "ambiguity_warnings": ["a draw is possible"], "edge_cases": ["match postponed"]})
+    _as(module, ALICE, 0)
+    out = json.loads(contract.suggest_market("the final", "who wins"))
+    assert out["options"] == ["A", "B", "Draw"]
+    assert out["ambiguity_warnings"] and out["edge_cases"]
+    assert json.loads(contract.get_draft(ALICE))["question"] == "Which team wins the final?"
+
+
+def test_clock_sources_are_the_proven_pair(module):
+    assert module.TIME_SOURCES == [
+        "https://cloudflare.com/cdn-cgi/trace",
+        "https://eth.blockscout.com/api/v2/main-page/blocks",
+    ]

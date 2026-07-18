@@ -12,7 +12,7 @@ export const NETWORK_LABEL = IS_BRADBURY ? "Testnet Bradbury" : "Studionet";
 // Studionet sponsors gas; Bradbury needs real testnet GEN from a faucet.
 export const GAS_SPONSORED = !IS_BRADBURY;
 
-export const CONTRACT_ADDRESS = (process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0xEBB920bA6a8Ac39ccee656c50000eDA4FbfbB718") as `0x${string}`;
+export const CONTRACT_ADDRESS = (process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0xfCb9bF0b431BBDaeA051898Fa7d16eBA0b6eDc7E") as `0x${string}`;
 export const CONTRACT_CONFIGURED = /^0x[a-fA-F0-9]{40}$/.test(CONTRACT_ADDRESS);
 
 export const EXPLORER_URL = (
