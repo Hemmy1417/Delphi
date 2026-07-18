@@ -41,7 +41,9 @@
   --font-mono: var(--font-jetbrains);
 }
 
-html { scroll-behavior: smooth; }
+/* Larger base type: bump the root so every rem-based size (Tailwind text-*, eyebrow,
+   mono labels) scales together — 1rem = 18px instead of 16px. */
+html { scroll-behavior: smooth; font-size: 112.5%; }
 
 body {
   background: var(--canvas);
